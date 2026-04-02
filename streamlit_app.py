@@ -1,93 +1,183 @@
 import streamlit as st
-import random as rand
+import streamlit.components.v1 as components
 
-# --- 1. 大腦升級：稍強一點的 AI 邏輯 ---
-def evaluate_board(board, x, y, flag):
-    directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
-    max_count = 0
-    for dx, dy in directions:
-        count = 1
-        # 正向
-        for i in range(1, 6):
-            nx, ny = x + dx*i, y + dy*i
-            if 0<=nx<19 and 0<=ny<19 and board[nx][ny] == flag: count += 1
-            else: break
-        # 反向
-        for i in range(1, 6):
-            nx, ny = x - dx*i, y - dy*i
-            if 0<=nx<19 and 0<=ny<19 and board[nx][ny] == flag: count += 1
-            else: break
-        max_count = max(max_count, count)
-    return max_count
+# 頁面設定
+st.set_page_config(page_title="Python Snake", layout="centered")
+st.title("🐍 貪吃蛇 (Streamlit Web 版)")
+st.write("請先點擊下方黑色的遊戲畫面，然後使用鍵盤的 **上、下、左、右** 開始遊戲！")
 
-def ai_move():
-    best_score = -1
-    best_moves = []
-    # 遍歷棋盤找最佳點
-    for r in range(19):
-        for c in range(19):
-            if st.session_state.chess_map[r][c] == 0:
-                # 攻擊分數 (自己連線) + 防禦分數 (堵截玩家)
-                score = evaluate_board(st.session_state.chess_map, r, c, 2) * 1.1 + \
-                        evaluate_board(st.session_state.chess_map, r, c, 1)
-                if score > best_score:
-                    best_score = score
-                    best_moves = [(r, c)]
-                elif score == best_score:
-                    best_moves.append((r, c))
-    return rand.choice(best_moves) if best_moves else None
-
-# --- 2. 視覺升級：復用木質棋盤風格 ---
-st.markdown("""
+# 將原來的 Tkinter 邏輯轉換為 HTML5 + JavaScript
+snake_html = """
+<!DOCTYPE html>
+<html>
+<head>
     <style>
-    .board-container {
-        background-color: #AA8866;  /* 復用你原來的 BG_COLOR */
-        padding: 10px;
-        border-radius: 5px;
-        display: inline-block;
-    }
-    /* 這裡微調按鈕樣式，讓它圓潤一點像棋子 */
-    .stButton > button {
-        border-radius: 50% !important;
-        width: 25px !important;
-        height: 25px !important;
-        background-color: rgba(255,255,255,0.1) !important;
-        border: 1px solid #886644 !important;
-        color: transparent !important;
-        padding: 0 !important;
-    }
-    .stButton > button:hover {
-        border-color: #000 !important;
-    }
-    /* 黑白子樣式 */
-    button[kind="primary"] { background-color: #000 !important; color: #000 !important; opacity: 1 !important; }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #ffffff;
+        }
+        canvas {
+            background-color: #000000;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
     </style>
-""", unsafe_allow_html=True)
+</head>
+<body>
+    <canvas id="gameCanvas" width="500" height="300"></canvas>
 
-# --- 3. 遊戲狀態與邏輯 ---
-if 'chess_map' not in st.session_state:
-    st.session_state.chess_map = [[0 for _ in range(19)] for _ in range(19)]
-    st.session_state.game_over = False
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
 
-def handle_click(r, c):
-    if st.session_state.chess_map[r][c] == 0 and not st.session_state.game_over:
-        st.session_state.chess_map[r][c] = 1 # 玩家下黑棋
-        # 電腦立刻回應
-        move = ai_move()
-        if move:
-            st.session_state.chess_map[move[0]][move[1]] = 2
+        // 配置常量 (放大 BLOCK_SIZE 適應網頁)
+        const BLOCK_SIZE = 20;
+        const MAP_WIDTH = 25;
+        const MAP_HEIGHT = 15;
+        const COLOR = "#33AAFF";
+        const FOOD_COLOR = "#FF3377";
+        
+        let snake = [];
+        let food = {};
+        let direction = "";
+        let nextDirection = "";
+        let speed = 100;
+        let gameLoop;
+        let gameStarted = false;
+        let gameOver = false;
 
-# --- 4. 渲染 ---
-st.title("六子棋：復刻版介面")
-with st.container():
-    st.write("目前狀態：玩家 vs AI (強攻型)")
-    for r in range(19):
-        cols = st.columns(19)
-        for c in range(19):
-            val = st.session_state.chess_map[r][c]
-            # 根據棋子狀態顯示不同符號
-            icon = " "
-            if val == 1: icon = "⚫"
-            if val == 2: icon = "⚪"
-            
-            cols[c].button(icon, key=f"{r}-{c}", on_click=handle_click, args=(r, c))
+        function initGame() {
+            let startX = Math.floor(MAP_WIDTH / 2);
+            let startY = Math.floor(MAP_HEIGHT / 2) - 1;
+            snake = [
+                {x: startX, y: startY},
+                {x: startX, y: startY + 1},
+                {x: startX, y: startY + 2}
+            ];
+            placeFood();
+            direction = "UP";
+            nextDirection = "UP";
+            speed = 100;
+            gameOver = false;
+            gameStarted = false;
+            drawInitScreen();
+        }
+
+        function placeFood() {
+            food = {
+                x: Math.floor(Math.random() * MAP_WIDTH),
+                y: Math.floor(Math.random() * MAP_HEIGHT)
+            };
+        }
+
+        function drawBlock(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            // 畫個邊框讓蛇有立體感
+            ctx.strokeStyle = "#000000";
+            ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        }
+
+        function drawInitScreen() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // 畫蛇
+            snake.forEach(segment => drawBlock(segment.x, segment.y, COLOR));
+            // 文字
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "20px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("Press Arrow Key To Start.", canvas.width / 2, canvas.height / 2);
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            direction = nextDirection;
+            let head = {x: snake[0].x, y: snake[0].y};
+
+            if (direction === "LEFT") head.x -= 1;
+            else if (direction === "UP") head.y -= 1;
+            else if (direction === "RIGHT") head.x += 1;
+            else if (direction === "DOWN") head.y += 1;
+
+            // 死亡判定 (撞牆)
+            if (head.x < 0 || head.x >= MAP_WIDTH || head.y < 0 || head.y >= MAP_HEIGHT) {
+                endGame();
+                return;
+            }
+
+            // 死亡判定 (撞自己)
+            for (let i = 0; i < snake.length; i++) {
+                if (snake[i].x === head.x && snake[i].y === head.y) {
+                    endGame();
+                    return;
+                }
+            }
+
+            snake.unshift(head); // 加入新頭
+
+            // 吃食物判定
+            if (head.x === food.x && head.y === food.y) {
+                placeFood();
+                if (speed > 40) speed -= 5; // 加速
+                clearInterval(gameLoop);
+                gameLoop = setInterval(update, speed);
+            } else {
+                snake.pop(); // 沒吃到就移除尾巴
+            }
+
+            draw();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBlock(food.x, food.y, FOOD_COLOR);
+            snake.forEach(segment => drawBlock(segment.x, segment.y, COLOR));
+        }
+
+        function endGame() {
+            gameOver = true;
+            clearInterval(gameLoop);
+            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "20px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("GameOver", canvas.width / 2, canvas.height / 2 - 15);
+            ctx.fillText("Press Arrow Key To Replay.", canvas.width / 2, canvas.height / 2 + 15);
+        }
+
+        // 鍵盤監聽
+        window.addEventListener("keydown", function(e) {
+            // 防止按下方向鍵時畫面捲動
+            if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+
+            if (gameOver) {
+                initGame();
+                return;
+            }
+
+            if (!gameStarted) {
+                gameStarted = true;
+                gameLoop = setInterval(update, speed);
+            }
+
+            if (e.code === "ArrowLeft" && direction !== "RIGHT") nextDirection = "LEFT";
+            else if (e.code === "ArrowUp" && direction !== "DOWN") nextDirection = "UP";
+            else if (e.code === "ArrowRight" && direction !== "LEFT") nextDirection = "RIGHT";
+            else if (e.code === "ArrowDown" && direction !== "UP") nextDirection = "DOWN";
+        });
+
+        initGame();
+    </script>
+</body>
+</html>
+"""
+
+# 將 HTML 嵌入 Streamlit，設定高度以容納 Canvas
+components.html(snake_html, height=350)
