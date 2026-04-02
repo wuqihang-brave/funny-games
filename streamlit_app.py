@@ -1,33 +1,51 @@
 import streamlit as st
-import random as rand
 
-# 這裡放入你之前的 Connect6Logic 類別 (純邏輯部分)
-class Connect6Logic:
-    def __init__(self):
-        self.size = 19
-        if 'chess_map' not in st.session_state:
-            st.session_state.chess_map = [[0 for _ in range(19)] for _ in range(19)]
-        if 'black_turn' not in st.session_state:
-            st.session_state.black_turn = True
+# 1. 初始化遊戲狀態 (避免重新渲染時數據丟失)
+if 'chess_map' not in st.session_state:
+    st.session_state.chess_map = [[0 for _ in range(19)] for _ in range(19)]
+    st.session_state.black_turn = True
+    st.session_state.game_over = False
 
-    def place_chess(self, x, y):
-        if st.session_state.chess_map[x][y] == 0:
-            st.session_state.chess_map[x][y] = 1 if st.session_state.black_turn else 2
-            st.session_state.black_turn = not st.session_state.black_turn
-            return True
-        return False
+def place_piece(r, c):
+    if st.session_state.chess_map[r][c] == 0 and not st.session_state.game_over:
+        # 1 代表黑棋，2 代表白棋
+        st.session_state.chess_map[r][c] = 1 if st.session_state.black_turn else 2
+        st.session_state.black_turn = not st.session_state.black_turn
 
-# --- Streamlit 介面 ---
+def reset_game():
+    st.session_state.chess_map = [[0 for _ in range(19)] for _ in range(19)]
+    st.session_state.black_turn = True
+    st.session_state.game_over = False
+
+# --- UI 介面 ---
 st.title("六子棋 Connect 6")
 
-logic = Connect6Logic()
+# 顯示目前輪到誰
+current_player = "黑棋 ⚫" if st.session_state.black_turn else "白棋 ⚪"
+st.subheader(f"當前回合: {current_player}")
 
-# 建立 19x19 的網格按鈕 (這只是一個簡易展示)
-for i in range(19):
+if st.button("重置遊戲"):
+    reset_game()
+    st.rerun()
+
+# 2. 繪製棋盤
+# 使用 CSS 強制縮小按鈕間距，讓它看起來像棋盤
+st.markdown("""
+    <style>
+    div.stButton > button {
+        width: 30px !important;
+        height: 30px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        line-height: 30px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+for r in range(19):
     cols = st.columns(19)
-    for j in range(19):
-        state = st.session_state.chess_map[i][j]
+    for c in range(19):
+        state = st.session_state.chess_map[r][c]
         label = "⚫" if state == 1 else ("⚪" if state == 2 else " ")
-        if cols[j].button(label, key=f"{i}-{j}"):
-            if logic.place_chess(i, j):
-                st.rerun()
+        # 點擊按鈕執行下棋
+        cols[c].button(label, key=f"btn_{r}_{c}", on_click=place_piece, args=(r, c))
